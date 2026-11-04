@@ -4,7 +4,10 @@ import uz from './lib/uz.js';
 export const TOKEN_KEY = 'localsystem_token';
 export const SESSION_EXPIRED_KEY = 'localsystem_session_expired';
 
-const api = axios.create({ baseURL: '/api' });
+// Set VITE_API_URL at build time (Vercel → Environment Variables), e.g. https://your-api.up.railway.app/api
+export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(/\/+$/, '');
+
+const api = axios.create({ baseURL: API_URL, timeout: 30_000 });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);

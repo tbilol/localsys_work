@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import db from '../db.js';
+import pool from '../../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
-import { fromSqlTs, ok, toSqlTs } from '../utils.js';
+import { ok } from '../utils.js';
 
 const router = Router();
 router.use(requireRole('admin', 'owner'));
 
-// Day boundaries are computed in the server's local time and compared against stored UTC SQL timestamps.
+// Day boundaries are computed in the server's local time (set TZ, e.g. TZ=Asia/Tashkent, in production).
 const startOfDay = (d = new Date()) => {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -25,44 +25,42 @@ const startOfWeek = () => {
 const localDateKey = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-router.get('/stats', (_req, res) => {
-  const today = toSqlTs(startOfDay());
-  const tomorrow = toSqlTs(addDays(startOfDay(), 1));
-  const weekStart = toSqlTs(startOfWeek());
+const count = async (text, params) => (await pool.query(text, params)).rows[0].n;
 
-  const totalWorkers = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'worker' AND status = 'active'").get().n;
-  const tasksToday = db.prepare('SELECT COUNT(*) AS n FROM tasks WHERE createdAt >= ? AND createdAt < ?').get(today, tomorrow).n;
-  const completedThisWeek = db
-    .prepare("SELECT COUNT(*) AS n FROM tasks WHERE status = 'bajarildi' AND completedAt >= ?")
-    .get(weekStart).n;
-  // Active workers who have not submitted a report today.
-  const pendingReports = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM users u
-       WHERE u.role = 'worker' AND u.status = 'active'
-         AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.userId = u.id AND r.createdAt >= ? AND r.createdAt < ?)`
-    )
-    .get(today, tomorrow).n;
+router.get('/stats', async (_req, res) => {
+  const today = startOfDay();
+  const tomorrow = addDays(today, 1);
+  const weekStart = startOfWeek();
 
-  const statusCounts = Object.fromEntries(
-    db.prepare('SELECT status, COUNT(*) AS n FROM tasks GROUP BY status').all().map((r) => [r.status, r.n])
-  );
-  const overdue = db
-    .prepare("SELECT COUNT(*) AS n FROM tasks WHERE status IN ('kutilmoqda','jarayonda') AND deadline < ?")
-    .get(toSqlTs(new Date())).n;
+  const [totalWorkers, tasksToday, completedThisWeek, pendingReports, overdue, statusRows, recentTasks, recentReports] =
+    await Promise.all([
+      count("SELECT COUNT(*) AS n FROM users WHERE role = 'worker' AND status = 'active'"),
+      count('SELECT COUNT(*) AS n FROM tasks WHERE "createdAt" >= $1 AND "createdAt" < $2', [today, tomorrow]),
+      count(`SELECT COUNT(*) AS n FROM tasks WHERE status = 'bajarildi' AND "completedAt" >= $1`, [weekStart]),
+      // Active workers who have not submitted a report today.
+      count(
+        `SELECT COUNT(*) AS n FROM users u
+         WHERE u.role = 'worker' AND u.status = 'active'
+           AND NOT EXISTS (SELECT 1 FROM reports r WHERE r."userId" = u.id AND r."createdAt" >= $1 AND r."createdAt" < $2)`,
+        [today, tomorrow]
+      ),
+      count(`SELECT COUNT(*) AS n FROM tasks WHERE status IN ('kutilmoqda','jarayonda') AND deadline < $1`, [new Date()]),
+      pool.query('SELECT status, COUNT(*) AS n FROM tasks GROUP BY status').then((r) => r.rows),
+      pool
+        .query(
+          `SELECT t.id, t.title, t.priority, t.status, t.deadline, t."createdAt", w."fullName" AS "assignedToName"
+           FROM tasks t JOIN users w ON w.id = t."assignedTo" ORDER BY t."createdAt" DESC, t.id DESC LIMIT 10`
+        )
+        .then((r) => r.rows),
+      pool
+        .query(
+          `SELECT r.id, r.title, r.department, r."createdAt", u."fullName" AS "userName"
+           FROM reports r JOIN users u ON u.id = r."userId" ORDER BY r."createdAt" DESC, r.id DESC LIMIT 8`
+        )
+        .then((r) => r.rows),
+    ]);
 
-  const recentTasks = db
-    .prepare(
-      `SELECT t.id, t.title, t.priority, t.status, t.deadline, t.createdAt, w.fullName AS assignedToName
-       FROM tasks t JOIN users w ON w.id = t.assignedTo ORDER BY t.createdAt DESC, t.id DESC LIMIT 10`
-    )
-    .all();
-  const recentReports = db
-    .prepare(
-      `SELECT r.id, r.title, r.department, r.createdAt, u.fullName AS userName
-       FROM reports r JOIN users u ON u.id = r.userId ORDER BY r.createdAt DESC, r.id DESC LIMIT 8`
-    )
-    .all();
+  const statusCounts = Object.fromEntries(statusRows.map((r) => [r.status, r.n]));
 
   ok(res, {
     totalWorkers,
@@ -81,7 +79,7 @@ router.get('/stats', (_req, res) => {
   });
 });
 
-router.get('/chart-data', (_req, res) => {
+router.get('/chart-data', async (_req, res) => {
   const first = addDays(startOfDay(), -6);
   const end = addDays(startOfDay(), 1);
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -89,30 +87,26 @@ router.get('/chart-data', (_req, res) => {
     return { date: localDateKey(d), created: 0, completed: 0, rejected: 0 };
   });
   const byKey = Object.fromEntries(days.map((d) => [d.date, d]));
+  const bump = (ts, field) => {
+    const b = byKey[localDateKey(new Date(ts))];
+    if (b) b[field]++;
+  };
 
-  const bucket = (ts) => byKey[localDateKey(fromSqlTs(ts))];
-
-  for (const { createdAt } of db
-    .prepare('SELECT createdAt FROM tasks WHERE createdAt >= ? AND createdAt < ?')
-    .all(toSqlTs(first), toSqlTs(end))) {
-    const b = bucket(createdAt);
-    if (b) b.created++;
-  }
-  for (const { completedAt } of db
-    .prepare("SELECT completedAt FROM tasks WHERE status = 'bajarildi' AND completedAt >= ? AND completedAt < ?")
-    .all(toSqlTs(first), toSqlTs(end))) {
-    const b = bucket(completedAt);
-    if (b) b.completed++;
-  }
-  for (const { createdAt } of db
-    .prepare(
-      `SELECT h.createdAt FROM task_status_history h JOIN tasks t ON t.id = h.taskId
-       WHERE h.toStatus = 'rad_etildi' AND t.status = 'rad_etildi' AND h.createdAt >= ? AND h.createdAt < ?`
-    )
-    .all(toSqlTs(first), toSqlTs(end))) {
-    const b = bucket(createdAt);
-    if (b) b.rejected++;
-  }
+  const [created, completed, rejected] = await Promise.all([
+    pool.query('SELECT "createdAt" AS ts FROM tasks WHERE "createdAt" >= $1 AND "createdAt" < $2', [first, end]),
+    pool.query(
+      `SELECT "completedAt" AS ts FROM tasks WHERE status = 'bajarildi' AND "completedAt" >= $1 AND "completedAt" < $2`,
+      [first, end]
+    ),
+    pool.query(
+      `SELECT h."createdAt" AS ts FROM task_status_history h JOIN tasks t ON t.id = h."taskId"
+       WHERE h."toStatus" = 'rad_etildi' AND t.status = 'rad_etildi' AND h."createdAt" >= $1 AND h."createdAt" < $2`,
+      [first, end]
+    ),
+  ]);
+  created.rows.forEach((r) => bump(r.ts, 'created'));
+  completed.rows.forEach((r) => bump(r.ts, 'completed'));
+  rejected.rows.forEach((r) => bump(r.ts, 'rejected'));
 
   ok(res, days);
 });

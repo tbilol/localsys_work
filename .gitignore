@@ -2,4 +2,7 @@ node_modules/
 client/dist/
 server/data/
 .env
+.env.*
+!.env.example
 *.log
+.vercel

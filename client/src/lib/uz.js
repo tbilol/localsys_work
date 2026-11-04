@@ -25,6 +25,10 @@ const uz = {
   error_network: "Server bilan aloqa yo'q. Server ishga tushirilganmi?",
   error_load: "Ma'lumotlarni yuklab bo'lmadi",
   session_expired: 'Sessiya tugadi, qayta kiring',
+  crash_title: 'Kutilmagan xatolik yuz berdi',
+  crash_text: "Sahifani qayta yuklab ko'ring. Muammo takrorlansa, administratorga murojaat qiling.",
+  crash_reload: 'Sahifani qayta yuklash',
+  crash_home: 'Bosh sahifaga qaytish',
 
   // Navigatsiya
   nav_dashboard: 'Boshqaruv paneli',

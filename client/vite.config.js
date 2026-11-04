@@ -10,6 +10,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: { '/api': 'http://localhost:4000' },
+    // Only used if VITE_API_URL is set to a relative "/api".
+    proxy: { '/api': 'http://localhost:3000' },
   },
 });

@@ -1,3 +1,5 @@
+import pool from '../db/pool.js';
+
 export class ApiError extends Error {
   constructor(status, message) {
     super(message);
@@ -7,7 +9,6 @@ export class ApiError extends Error {
 
 export const ok = (res, data, status = 200) => res.status(status).json({ success: true, data, error: null });
 
-export const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 export const ROLES = ['admin', 'owner', 'worker'];
 export const DEPARTMENTS = ['haydovchilar', 'dispetcherlar', 'mexaniklar', 'moliya'];
@@ -36,22 +37,18 @@ export function toId(v) {
   return n;
 }
 
-// Same format SQLite's CURRENT_TIMESTAMP produces: "YYYY-MM-DD HH:MM:SS" in UTC.
-export const toSqlTs = (d) => new Date(d).toISOString().slice(0, 19).replace('T', ' ');
-export const fromSqlTs = (s) => new Date(`${s.replace(' ', 'T')}Z`);
-
-// Accepts any date/datetime string, returns a SQL timestamp or null for empty input.
+// Accepts any date/datetime string, returns a Date or null for empty input.
 export function toTs(v) {
   if (v === undefined || v === null || v === '') return null;
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) throw new ApiError(400, "Noto'g'ri sana");
-  return toSqlTs(d);
+  return d;
 }
 
-// Date-range filters: a plain "YYYY-MM-DD" covers the whole local day.
+// Date-range filters: a plain "YYYY-MM-DD" covers the whole day in the server's local time.
 export function toRangeStart(v) {
   if (!v) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return toSqlTs(new Date(`${v}T00:00:00`));
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(`${v}T00:00:00`);
   return toTs(v);
 }
 
@@ -60,9 +57,29 @@ export function toRangeEnd(v) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
     const d = new Date(`${v}T00:00:00`);
     d.setDate(d.getDate() + 1);
-    return toSqlTs(d);
+    return d;
   }
   return toTs(v);
+}
+
+// Collects positional parameters while building dynamic SQL: `WHERE x = ${p(value)}`.
+export function paramList() {
+  const params = [];
+  const p = (v) => {
+    params.push(v);
+    return `$${params.length}`;
+  };
+  return { params, p };
+}
+
+// Pass the transaction's query function when logging inside a transaction.
+export async function logActivity(action, userId, targetId = null, details = null, query = pool.query.bind(pool)) {
+  await query('INSERT INTO activity_log (action, "userId", "targetId", details) VALUES ($1, $2, $3, $4)', [
+    action,
+    userId ?? null,
+    targetId ?? null,
+    details ? JSON.stringify(details) : null,
+  ]);
 }
 
 export const publicUser = (u) => {

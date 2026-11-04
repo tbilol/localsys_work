@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import db from '../db.js';
+import pool from '../../db/pool.js';
 import { ApiError } from '../utils.js';
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
@@ -11,7 +11,7 @@ export const JWT_EXPIRES_IN = '24h';
 
 export const signToken = (user) => jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
-export function authenticate(req, _res, next) {
+export async function authenticate(req, _res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return next(new ApiError(401, 'Avtorizatsiya talab qilinadi'));
@@ -24,9 +24,11 @@ export function authenticate(req, _res, next) {
   }
 
   // Re-read the user so role changes and deactivation take effect immediately.
-  const user = db
-    .prepare('SELECT id, fullName, phone, role, department, status, createdAt, createdBy FROM users WHERE id = ?')
-    .get(payload.id);
+  const { rows } = await pool.query(
+    'SELECT id, "fullName", phone, role, department, status, "createdAt", "createdBy" FROM users WHERE id = $1',
+    [payload.id]
+  );
+  const user = rows[0];
   if (!user || user.status !== 'active') return next(new ApiError(401, "Hisob faol emas yoki o'chirilgan"));
 
   req.user = user;
