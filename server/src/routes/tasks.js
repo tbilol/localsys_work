@@ -22,7 +22,7 @@ const defaultQuery = pool.query.bind(pool);
 
 const TASK_SELECT = `
   SELECT t.*, w."fullName" AS "assignedToName", w.department AS "assignedToDepartment",
-         b."fullName" AS "assignedByName"
+         w.profession AS "assignedToProfession", b."fullName" AS "assignedByName"
   FROM tasks t
   JOIN users w ON w.id = t."assignedTo"
   LEFT JOIN users b ON b.id = t."assignedBy"`;

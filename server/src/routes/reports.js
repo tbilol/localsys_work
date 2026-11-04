@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import pool from '../../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
-import { ApiError, DEPARTMENTS, logActivity, ok, paramList, str, toId, toRangeEnd, toRangeStart } from '../utils.js';
+import { ApiError, logActivity, ok, paramList, str, toId, toRangeEnd, toRangeStart } from '../utils.js';
 import { createReportRules } from '../validation.js';
 
 const router = Router();
@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
     where.push(`r."userId" = ${p(req.user.id)}`);
   } else {
     if (req.query.userId) where.push(`r."userId" = ${p(toId(req.query.userId))}`);
-    if (DEPARTMENTS.includes(req.query.department)) where.push(`r.department = ${p(req.query.department)}`);
+    if (str(req.query.profession)) where.push(`r.profession = ${p(str(req.query.profession))}`);
   }
   const from = toRangeStart(req.query.from);
   const to = toRangeEnd(req.query.to);
@@ -46,12 +46,12 @@ router.post('/', requireRole('worker'), createReportRules, async (req, res) => {
   if (!title || !content) throw new ApiError(400, 'Sarlavha va mazmun kiritilishi shart');
 
   const { rows } = await pool.query(
-    'INSERT INTO reports ("userId", department, title, content) VALUES ($1, $2, $3, $4) RETURNING id',
-    [req.user.id, req.user.department, title, content]
+    'INSERT INTO reports ("userId", department, profession, title, content) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [req.user.id, req.user.department, req.user.profession, title, content]
   );
   const { id } = rows[0];
 
-  await logActivity('report.create', req.user.id, id, { title, department: req.user.department });
+  await logActivity('report.create', req.user.id, id, { title, profession: req.user.profession });
   ok(res, await loadReportFor(req.user, id), 201);
 });
 

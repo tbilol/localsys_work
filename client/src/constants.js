@@ -3,6 +3,22 @@ import { uz as uzLocale } from 'date-fns/locale';
 import uz from './lib/uz.js';
 
 export const DEPARTMENTS = ['haydovchilar', 'dispetcherlar', 'mexaniklar', 'moliya'];
+// Profession values are stored as their display text directly (no code -> label lookup needed).
+export const PROFESSIONS = [
+  'Haydovchi',
+  'Dispetcher',
+  'Mexanik',
+  'Moliyachi',
+  'Marketolog',
+  'Dasturchi',
+  'Bosh dasturchi',
+  'Operator',
+  'Menejer',
+  'Buxgalter',
+  'Kadrchi',
+  'Xavfsizlik xodimi',
+];
+export const PROFESSION_OTHER = 'Boshqa';
 export const ROLES = ['admin', 'owner', 'worker'];
 export const PRIORITIES = ['past', 'orta', 'yuqori', 'shoshilinch'];
 export const STATUSES = ['kutilmoqda', 'jarayonda', 'bajarildi', 'rad_etildi'];
@@ -15,6 +31,9 @@ export const statusLabel = (s) => uz[`status_${s}`] ?? s;
 export const priorityLabel = (p) => uz[`priority_${p}`] ?? p;
 export const roleLabel = (r) => uz[`role_${r}`] ?? r;
 export const deptLabel = (d) => (d ? uz[`dept_${d}`] ?? d : '');
+// profession is stored as its own display text; department is the legacy fallback for rows
+// that predate professions and were never edited since.
+export const professionLabel = (u) => u?.profession || deptLabel(u?.department) || '';
 
 // The server stores SQLite CURRENT_TIMESTAMP values ("YYYY-MM-DD HH:MM:SS", UTC, no zone suffix).
 export const toDate = (v) => {

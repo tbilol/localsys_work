@@ -22,6 +22,7 @@ function schema({ id, ts, now }) {
       password    TEXT NOT NULL,
       role        TEXT NOT NULL CHECK (${CHECKS.role}),
       department  TEXT,
+      profession  TEXT,
       status      TEXT NOT NULL DEFAULT 'active' CHECK (${CHECKS.userStatus}),
       "createdAt" ${ts} NOT NULL DEFAULT ${now},
       "createdBy" INTEGER REFERENCES users(id)
@@ -52,6 +53,7 @@ function schema({ id, ts, now }) {
       id          ${id},
       "userId"    INTEGER NOT NULL REFERENCES users(id),
       department  TEXT,
+      profession  TEXT,
       title       TEXT NOT NULL,
       content     TEXT NOT NULL,
       "createdAt" ${ts} NOT NULL DEFAULT ${now}
@@ -64,6 +66,13 @@ function schema({ id, ts, now }) {
       details     TEXT,
       "createdAt" ${ts} NOT NULL DEFAULT ${now}
     )`,
+    `CREATE TABLE IF NOT EXISTS profession_requests (
+      id          ${id},
+      "userId"    INTEGER REFERENCES users(id),
+      profession  TEXT NOT NULL,
+      message     TEXT,
+      "createdAt" ${ts} NOT NULL DEFAULT ${now}
+    )`,
     'CREATE INDEX IF NOT EXISTS idx_tasks_assignedTo ON tasks("assignedTo")',
     'CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)',
     'CREATE INDEX IF NOT EXISTS idx_tasks_createdAt ON tasks("createdAt")',
@@ -72,7 +81,23 @@ function schema({ id, ts, now }) {
     'CREATE INDEX IF NOT EXISTS idx_activity_createdAt ON activity_log("createdAt")',
     'CREATE INDEX IF NOT EXISTS idx_activity_userId ON activity_log("userId")',
     'CREATE INDEX IF NOT EXISTS idx_history_taskId ON task_status_history("taskId")',
+    'CREATE INDEX IF NOT EXISTS idx_profession_requests_createdAt ON profession_requests("createdAt")',
   ];
+}
+
+// Additive, backward-compatible column: on a database created before "profession" existed,
+// CREATE TABLE IF NOT EXISTS above is a no-op, so the column has to be added explicitly here.
+async function ensureProfessionColumns() {
+  if (dialect === 'postgres') {
+    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS profession TEXT');
+    await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS profession TEXT');
+    return;
+  }
+  const db = pool.sqlite;
+  for (const table of ['users', 'reports']) {
+    const cols = db.prepare(`PRAGMA table_info("${table}")`).all().map((c) => c.name);
+    if (!cols.includes('profession')) db.exec(`ALTER TABLE "${table}" ADD COLUMN profession TEXT`);
+  }
 }
 
 // Arbitrary constant so concurrently starting instances do not run the DDL at the same time.
@@ -85,6 +110,7 @@ export async function migrate() {
       await q('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK]);
       for (const stmt of schema({ id: 'SERIAL PRIMARY KEY', ts: 'TIMESTAMPTZ', now: 'NOW()' })) await q(stmt);
     });
+    await ensureProfessionColumns();
     return;
   }
 
@@ -99,6 +125,7 @@ export async function migrate() {
   }
   for (const stmt of schema({ id: 'INTEGER PRIMARY KEY', ts: 'TEXT', now: 'CURRENT_TIMESTAMP' })) db.exec(stmt);
   db.pragma(`user_version = ${SQLITE_SCHEMA_VERSION}`);
+  await ensureProfessionColumns();
 }
 
 // Creates the default admin when no admin exists. Returns true if one was created.

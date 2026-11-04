@@ -11,7 +11,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { deptLabel, roleLabel } from '../constants.js';
+import { professionLabel, roleLabel } from '../constants.js';
 import uz from '../lib/uz.js';
 import { Avatar } from './ui.jsx';
 
@@ -59,7 +59,7 @@ export default function Layout() {
               <div className="name">{user.fullName}</div>
               <div className="role">
                 {roleLabel(user.role)}
-                {user.department ? ` · ${deptLabel(user.department)}` : ''}
+                {professionLabel(user) ? ` · ${professionLabel(user)}` : ''}
               </div>
             </div>
           </div>

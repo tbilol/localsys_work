@@ -1,5 +1,5 @@
 import { body, param, validationResult } from 'express-validator';
-import { ApiError, DEPARTMENTS, PRIORITIES, ROLES, TASK_STATUSES } from './utils.js';
+import { ApiError, PRIORITIES, ROLES, TASK_STATUSES } from './utils.js';
 
 // Runs the chains, then reports the first problem in the usual { success, data, error } envelope.
 // Route handlers still apply the business rules (permissions, state transitions, uniqueness).
@@ -43,12 +43,14 @@ const passwordRule = () =>
   .isLength({ min: 6, max: 128 })
   .withMessage("Parol 6 dan 128 gacha belgidan iborat bo'lishi kerak");
 
+const professionRule = (required) => text('profession', 100, required, "Kasb nomi kiritilishi shart");
+
 export const createUserRules = validate(
   fullNameRule(true),
   body('phone').custom(isPhone).withMessage(PHONE_MSG),
   passwordRule(),
   oneOf('role', ROLES, "Noto'g'ri rol"),
-  oneOf('department', DEPARTMENTS, "Noto'g'ri bo'lim")
+  professionRule(false)
 );
 
 export const updateUserRules = validate(
@@ -57,7 +59,7 @@ export const updateUserRules = validate(
   body('phone').optional().custom(isPhone).withMessage(PHONE_MSG),
   passwordRule().optional({ values: 'falsy' }),
   oneOf('role', ROLES, "Noto'g'ri rol"),
-  oneOf('department', DEPARTMENTS, "Noto'g'ri bo'lim"),
+  professionRule(false),
   oneOf('status', ['active', 'inactive'], "Noto'g'ri holat")
 );
 
@@ -100,4 +102,10 @@ export const bulkStatusRules = validate(
 export const createReportRules = validate(
   text('title', 200, true, 'Sarlavha va mazmun kiritilishi shart'),
   text('content', 10000, true, 'Sarlavha va mazmun kiritilishi shart')
+);
+
+export const createProfessionRequestRules = validate(
+  text('profession', 100, true, 'Kasb nomi kiritilishi shart'),
+  text('message', 1000, false, "Xabar matn bo'lishi kerak"),
+  body('userId').optional().isInt({ min: 1 }).withMessage("Noto'g'ri xodim")
 );

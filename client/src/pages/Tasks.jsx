@@ -60,8 +60,8 @@ function TaskDetail({ id }) {
         <dl className="kv">
           <dt>{uz.assigned_by}</dt>
           <dd>{task.assignedByName || '—'}</dd>
-          <dt>{uz.department}</dt>
-          <dd>{deptLabel(task.assignedToDepartment) || '—'}</dd>
+          <dt>{uz.profession_label}</dt>
+          <dd>{task.assignedToProfession || deptLabel(task.assignedToDepartment) || '—'}</dd>
           <dt>{uz.created_at}</dt>
           <dd>{fmtDateTime(task.createdAt)}</dd>
           <dt>{uz.completed_at}</dt>
@@ -303,7 +303,7 @@ export default function Tasks() {
                         </td>
                         <td data-label={uz.col_assignee}>
                           <div className="nowrap">{task.assignedToName}</div>
-                          <div className="cell-sub">{deptLabel(task.assignedToDepartment)}</div>
+                          <div className="cell-sub">{task.assignedToProfession || deptLabel(task.assignedToDepartment)}</div>
                         </td>
                         <td data-label={uz.col_priority}>
                           <PriorityBadge priority={task.priority} />

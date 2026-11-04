@@ -237,7 +237,9 @@ export default function Dashboard() {
                       <div className="list-title">{r.title}</div>
                       <div className="list-meta">
                         <span>{r.userName}</span>
-                        {r.department && <span className="dot-sep">{deptLabel(r.department)}</span>}
+                        {(r.profession || r.department) && (
+                          <span className="dot-sep">{r.profession || deptLabel(r.department)}</span>
+                        )}
                         <span className="dot-sep">{fmtRelative(r.createdAt)}</span>
                       </div>
                     </div>

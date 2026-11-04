@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { isToday, isYesterday } from 'date-fns';
-import { ClipboardList, FileText, LogIn, RefreshCw, UserCog, UserX, X } from 'lucide-react';
+import { Briefcase, ClipboardList, FileText, LogIn, RefreshCw, UserCog, UserX, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { errorMessage } from '../api.js';
 import { deptLabel, fmtPattern, fmtTime, priorityLabel, roleLabel, statusLabel, toDate } from '../constants.js';
@@ -15,6 +15,7 @@ const ICONS = {
   user: { icon: UserCog, tone: 'red' },
   task: { icon: ClipboardList, tone: 'amber' },
   report: { icon: FileText, tone: 'green' },
+  profession: { icon: Briefcase, tone: 'blue' },
 };
 const DELETE_ICON = { icon: UserX, tone: 'red' };
 
@@ -28,13 +29,15 @@ function describe(item) {
   switch (item.action) {
     case 'auth.login':
       return uz.feed_login;
-    case 'user.create':
+    case 'user.create': {
+      const profession = d.profession || (d.department ? deptLabel(d.department) : '');
       return (
         <>
           {rich('feed_user_create', { target, role: roleLabel(d.role) })}
-          {d.department ? ` (${deptLabel(d.department)})` : ''}
+          {profession ? ` (${profession})` : ''}
         </>
       );
+    }
     case 'user.update': {
       const fields = Object.keys(d.changes || {}).map((k) => uz[`changed_${k}`] ?? k);
       return (
@@ -66,13 +69,17 @@ function describe(item) {
           {d.reason && <span className="muted"> — “{d.reason}”</span>}
         </>
       );
-    case 'report.create':
+    case 'report.create': {
+      const profession = d.profession || (d.department ? deptLabel(d.department) : '');
       return (
         <>
           {rich('feed_report_create', { target })}
-          {d.department && <span className="muted"> ({deptLabel(d.department)})</span>}
+          {profession && <span className="muted"> ({profession})</span>}
         </>
       );
+    }
+    case 'profession.request':
+      return t('feed_profession_request', { profession: d.profession });
     default:
       return uz.feed_unknown;
   }

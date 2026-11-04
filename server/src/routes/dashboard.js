@@ -54,7 +54,7 @@ router.get('/stats', async (_req, res) => {
         .then((r) => r.rows),
       pool
         .query(
-          `SELECT r.id, r.title, r.department, r."createdAt", u."fullName" AS "userName"
+          `SELECT r.id, r.title, r.department, r.profession, r."createdAt", u."fullName" AS "userName"
            FROM reports r JOIN users u ON u.id = r."userId" ORDER BY r."createdAt" DESC, r.id DESC LIMIT 8`
         )
         .then((r) => r.rows),

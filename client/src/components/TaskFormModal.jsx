@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { addDays, setHours, setMinutes } from 'date-fns';
 import api, { errorMessage } from '../api.js';
-import { deptLabel, fmtPhone, PRIORITIES, priorityLabel, toLocalInput } from '../constants.js';
+import { fmtPhone, PRIORITIES, priorityLabel, professionLabel, toLocalInput } from '../constants.js';
 import uz from '../lib/uz.js';
 import { Field, Modal } from './ui.jsx';
 
@@ -46,9 +46,9 @@ export default function TaskFormModal({ open, onClose, onSaved, workers }) {
     }
   };
 
-  // Group workers by department for an easier dropdown.
+  // Group workers by profession for an easier dropdown.
   const groups = workers.reduce((acc, w) => {
-    (acc[w.department || ''] ||= []).push(w);
+    (acc[professionLabel(w)] ||= []).push(w);
     return acc;
   }, {});
 
@@ -99,7 +99,7 @@ export default function TaskFormModal({ open, onClose, onSaved, workers }) {
           <select id="t-worker" className="select" value={form.assignedTo} onChange={set('assignedTo')}>
             <option value="">{uz.select_worker}</option>
             {Object.entries(groups).map(([dep, list]) => (
-              <optgroup key={dep} label={deptLabel(dep) || uz.not_set}>
+              <optgroup key={dep} label={dep || uz.not_set}>
                 {list.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.fullName} ({fmtPhone(w.phone)})
