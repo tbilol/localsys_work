@@ -1,24 +1,34 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import { BarChart3, Pencil, Plus, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { errorMessage } from '../api.js';
 import {
-  DEPARTMENTS,
-  deptLabel,
   fmtDate,
   fmtPhone,
   fullPhone,
   isValidPhoneDigits,
   phoneDigits,
+  professionLabel,
+  PROFESSION_OTHER,
+  PROFESSIONS,
   ROLES,
   roleLabel,
 } from '../constants.js';
 import uz, { t } from '../lib/uz.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Avatar, EmptyState, Field, Modal, PhoneInput, RoleBadge, TableSkeleton } from '../components/ui.jsx';
+import WorkerStatsModal from '../components/WorkerStatsModal.jsx';
 
-const blank = { fullName: '', phone: '', password: '', role: 'worker', department: 'haydovchilar' };
+const blank = { fullName: '', phone: '', password: '', role: 'worker', profession: PROFESSIONS[0], professionOther: '', professionMessage: '' };
 const EMPTY_FILTERS = { role: '', status: '', search: '' };
+
+// Legacy workers (created before professions existed) get their old department mapped onto the
+// new list where the label matches; otherwise their old value becomes a "Boshqa" custom entry.
+function initialProfession(user) {
+  const value = professionLabel(user);
+  if (!value) return { profession: PROFESSIONS[0], professionOther: '' };
+  return PROFESSIONS.includes(value) ? { profession: value, professionOther: '' } : { profession: PROFESSION_OTHER, professionOther: value };
+}
 
 function UserFormModal({ open, user, roles, onClose, onSaved }) {
   const isEdit = Boolean(user);
@@ -34,7 +44,8 @@ function UserFormModal({ open, user, roles, onClose, onSaved }) {
             phone: phoneDigits(user.phone),
             password: '',
             role: user.role,
-            department: user.department || 'haydovchilar',
+            professionMessage: '',
+            ...initialProfession(user),
           }
         : blank
     );
@@ -42,18 +53,21 @@ function UserFormModal({ open, user, roles, onClose, onSaved }) {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const setPhone = (phone) => setForm((f) => ({ ...f, phone }));
+  const isCustomProfession = form.profession === PROFESSION_OTHER;
 
   const submit = async (e) => {
     e.preventDefault();
     if (!form.fullName.trim()) return toast.error(uz.v_name_required);
     if (!isValidPhoneDigits(form.phone)) return toast.error(uz.v_phone_invalid);
     if ((!isEdit || form.password) && form.password.length < 6) return toast.error(uz.v_password_min);
+    const finalProfession = isCustomProfession ? form.professionOther.trim() : form.profession;
+    if (form.role === 'worker' && isCustomProfession && !finalProfession) return toast.error(uz.v_profession_required);
 
     const body = {
       fullName: form.fullName.trim(),
       phone: fullPhone(form.phone),
       role: form.role,
-      department: form.role === 'worker' ? form.department : null,
+      profession: form.role === 'worker' ? finalProfession : null,
     };
     if (form.password) body.password = form.password;
 
@@ -61,6 +75,15 @@ function UserFormModal({ open, user, roles, onClose, onSaved }) {
     try {
       const saved = isEdit ? await api.put(`/users/${user.id}`, body) : await api.post('/users', body);
       toast.success(isEdit ? uz.user_updated : t('user_created', { role: roleLabel(saved.role) }));
+      if (form.role === 'worker' && isCustomProfession) {
+        api
+          .post('/profession-requests', {
+            profession: finalProfession,
+            message: form.professionMessage.trim() || undefined,
+            userId: saved.id,
+          })
+          .catch(() => {});
+      }
       onSaved(saved, isEdit);
       onClose();
     } catch (err) {
@@ -113,17 +136,41 @@ function UserFormModal({ open, user, roles, onClose, onSaved }) {
             </select>
           </Field>
           {form.role === 'worker' && (
-            <Field label={uz.field_department} htmlFor="u-dep">
-              <select id="u-dep" className="select" value={form.department} onChange={set('department')}>
-                {DEPARTMENTS.map((d) => (
-                  <option key={d} value={d}>
-                    {deptLabel(d)}
+            <Field label={uz.field_profession} htmlFor="u-dep">
+              <select id="u-dep" className="select" value={form.profession} onChange={set('profession')}>
+                {PROFESSIONS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
                   </option>
                 ))}
+                <option value={PROFESSION_OTHER}>{PROFESSION_OTHER}</option>
               </select>
             </Field>
           )}
         </div>
+        {form.role === 'worker' && isCustomProfession && (
+          <div className="form-row">
+            <Field label={uz.field_profession_other} htmlFor="u-prof-other">
+              <input
+                id="u-prof-other"
+                className="input"
+                value={form.professionOther}
+                onChange={set('professionOther')}
+                placeholder={uz.profession_other_ph}
+                autoFocus
+              />
+            </Field>
+            <Field label={uz.field_profession_message} htmlFor="u-prof-msg">
+              <textarea
+                id="u-prof-msg"
+                className="textarea"
+                value={form.professionMessage}
+                onChange={set('professionMessage')}
+                placeholder={uz.profession_message_ph}
+              />
+            </Field>
+          </div>
+        )}
       </form>
     </Modal>
   );
@@ -141,6 +188,7 @@ export default function Users() {
   const [togglingId, setTogglingId] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [statsFor, setStatsFor] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -164,6 +212,7 @@ export default function Users() {
   const closeModal = useCallback(() => setModal({ open: false, user: null }), []);
   const closeConfirm = useCallback(() => setConfirming(null), []);
   const closeDelete = useCallback(() => setDeleting(null), []);
+  const closeStats = useCallback(() => setStatsFor(null), []);
 
   const deleteUser = async () => {
     setDeleteBusy(true);
@@ -253,7 +302,7 @@ export default function Users() {
                 <tr>
                   <th>{uz.col_user}</th>
                   <th>{uz.col_role}</th>
-                  <th>{uz.col_department}</th>
+                  <th>{uz.col_profession}</th>
                   <th>{uz.col_created}</th>
                   <th>{uz.col_active}</th>
                   <th>
@@ -280,8 +329,8 @@ export default function Users() {
                       <td data-label={uz.col_role}>
                         <RoleBadge role={u.role} />
                       </td>
-                      <td data-label={uz.col_department}>
-                        {u.department ? deptLabel(u.department) : <span className="dim">—</span>}
+                      <td data-label={uz.col_profession}>
+                        {professionLabel(u) || <span className="dim">—</span>}
                       </td>
                       <td className="nowrap" data-label={uz.col_created}>
                         <div className="muted">{fmtDate(u.createdAt)}</div>
@@ -300,6 +349,11 @@ export default function Users() {
                         />
                       </td>
                       <td className="cell-actions">
+                        {u.role === 'worker' && (
+                          <button className="btn btn-ghost btn-sm" onClick={() => setStatsFor(u)}>
+                            <BarChart3 size={14} /> {uz.stats}
+                          </button>
+                        )}
                         <button className="btn btn-ghost btn-sm" onClick={() => setModal({ open: true, user: u })}>
                           <Pencil size={14} /> {uz.edit}
                         </button>
@@ -322,6 +376,7 @@ export default function Users() {
       </div>
 
       <UserFormModal open={modal.open} user={modal.user} roles={roles} onClose={closeModal} onSaved={onSaved} />
+      <WorkerStatsModal worker={statsFor} onClose={closeStats} />
 
       <Modal
         open={Boolean(confirming)}

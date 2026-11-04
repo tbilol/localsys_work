@@ -14,6 +14,7 @@ import taskRoutes from './routes/tasks.js';
 import reportRoutes from './routes/reports.js';
 import dashboardRoutes from './routes/dashboard.js';
 import activityRoutes from './routes/activity.js';
+import professionRequestRoutes from './routes/professionRequests.js';
 import { ApiError } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -42,6 +43,7 @@ app.use('/api/tasks', authenticate, taskRoutes);
 app.use('/api/reports', authenticate, reportRoutes);
 app.use('/api/dashboard', authenticate, dashboardRoutes);
 app.use('/api/activity', authenticate, activityRoutes);
+app.use('/api/profession-requests', authenticate, professionRequestRoutes);
 
 app.use('/api', (_req, res) => res.status(404).json({ success: false, data: null, error: "So'rov manzili topilmadi" }));
 

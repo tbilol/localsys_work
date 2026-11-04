@@ -3,12 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 import { FileText, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { errorMessage } from '../api.js';
-import { DEPARTMENTS, deptLabel, fmtDateTime, fmtRelative } from '../constants.js';
+import { deptLabel, fmtDateTime, fmtRelative, professionLabel, PROFESSIONS } from '../constants.js';
 import uz, { t } from '../lib/uz.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Badge, EmptyState, Field, ListSkeleton, Modal, TableSkeleton } from '../components/ui.jsx';
 
-const EMPTY_FILTERS = { department: '', userId: '', from: '', to: '', search: '' };
+const EMPTY_FILTERS = { profession: '', userId: '', from: '', to: '', search: '' };
+const reportProfession = (r) => r.profession || (r.department ? deptLabel(r.department) : '');
 
 function ReportViewModal({ report, onClose }) {
   return (
@@ -27,7 +28,7 @@ function ReportViewModal({ report, onClose }) {
         <div className="modal-body form-grid">
           <div className="list-meta" style={{ fontSize: 13 }}>
             <span>{report.userName}</span>
-            {report.department && <span className="dot-sep">{deptLabel(report.department)}</span>}
+            {reportProfession(report) && <span className="dot-sep">{reportProfession(report)}</span>}
             <span className="dot-sep">{fmtDateTime(report.createdAt)}</span>
           </div>
           <pre className="report-content" style={{ fontFamily: 'inherit' }}>
@@ -39,7 +40,7 @@ function ReportViewModal({ report, onClose }) {
   );
 }
 
-function NewReportModal({ open, onClose, onSaved, department }) {
+function NewReportModal({ open, onClose, onSaved, profession }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -97,8 +98,8 @@ function NewReportModal({ open, onClose, onSaved, department }) {
               autoFocus
             />
           </Field>
-          <Field label={uz.field_department} htmlFor="r-dep">
-            <input id="r-dep" className="input" value={deptLabel(department) || uz.not_set} disabled />
+          <Field label={uz.field_profession} htmlFor="r-dep">
+            <input id="r-dep" className="input" value={profession || uz.not_set} disabled />
           </Field>
         </div>
         <Field label={uz.field_content} htmlFor="r-content">
@@ -140,8 +141,8 @@ function WorkerReports() {
         <div>
           <h1>{uz.my_reports_title}</h1>
           <p>
-            {user.department
-              ? t('my_reports_subtitle', { department: deptLabel(user.department) })
+            {professionLabel(user)
+              ? t('my_reports_subtitle', { profession: professionLabel(user) })
               : uz.my_reports_subtitle_nodept}
           </p>
         </div>
@@ -193,7 +194,7 @@ function WorkerReports() {
       <NewReportModal
         open={creating}
         onClose={closeCreate}
-        department={user.department}
+        profession={professionLabel(user)}
         onSaved={(r) => setReports((list) => [r, ...list])}
       />
       <ReportViewModal report={viewing} onClose={closeView} />
@@ -250,7 +251,9 @@ function ManagerReports() {
 
   const setFilter = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
   const hasFilters = Object.values(filters).some(Boolean);
-  const visibleWorkers = filters.department ? workers.filter((w) => w.department === filters.department) : workers;
+  const visibleWorkers = filters.profession
+    ? workers.filter((w) => professionLabel(w) === filters.profession)
+    : workers;
 
   return (
     <>
@@ -266,12 +269,12 @@ function ManagerReports() {
           <Field label={uz.filter_search} htmlFor="rf-search">
             <input id="rf-search" className="input" placeholder={uz.search_reports_ph} value={filters.search} onChange={setFilter('search')} />
           </Field>
-          <Field label={uz.filter_department} htmlFor="rf-dep">
-            <select id="rf-dep" className="select" value={filters.department} onChange={setFilter('department')}>
-              <option value="">{uz.all_departments}</option>
-              {DEPARTMENTS.map((d) => (
-                <option key={d} value={d}>
-                  {deptLabel(d)}
+          <Field label={uz.filter_profession} htmlFor="rf-dep">
+            <select id="rf-dep" className="select" value={filters.profession} onChange={setFilter('profession')}>
+              <option value="">{uz.all_professions}</option>
+              {PROFESSIONS.map((p) => (
+                <option key={p} value={p}>
+                  {p}
                 </option>
               ))}
             </select>
@@ -314,7 +317,7 @@ function ManagerReports() {
                 <tr>
                   <th>{uz.col_report}</th>
                   <th>{uz.col_worker}</th>
-                  <th>{uz.col_department}</th>
+                  <th>{uz.col_profession}</th>
                   <th>{uz.col_submitted}</th>
                 </tr>
               </thead>
@@ -337,8 +340,8 @@ function ManagerReports() {
                     <td className="nowrap" data-label={uz.col_worker}>
                       {r.userName}
                     </td>
-                    <td data-label={uz.col_department}>
-                      {r.department ? <Badge tone="slate">{deptLabel(r.department)}</Badge> : '—'}
+                    <td data-label={uz.col_profession}>
+                      {reportProfession(r) ? <Badge tone="slate">{reportProfession(r)}</Badge> : '—'}
                     </td>
                     <td className="nowrap muted" data-label={uz.col_submitted}>
                       {fmtDateTime(r.createdAt)}

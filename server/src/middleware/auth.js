@@ -25,7 +25,7 @@ export async function authenticate(req, _res, next) {
 
   // Re-read the user so role changes and deactivation take effect immediately.
   const { rows } = await pool.query(
-    'SELECT id, "fullName", phone, role, department, status, "createdAt", "createdBy" FROM users WHERE id = $1',
+    'SELECT id, "fullName", phone, role, department, profession, status, "createdAt", "createdBy" FROM users WHERE id = $1',
     [payload.id]
   );
   const user = rows[0];
